@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar Journal</title>
+    <style>
+        /* CSS styles for the calendar */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #e9ecef;
+        }
+
+        .calendar-container {
+            max-width: 1500px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            background-color: #ffffff;
+        }
+
+        .calendar-header {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: auto;
+            gap: 20px;
+        }
+
+        .month-table {
+            border-collapse: collapse;
+            width: 100%;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .month-table th,
+        .month-table td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+            width: 11.11%;
+            height: 40px;
+        }
+
+        .calendar-day:hover {
+            background-color: #f0f0f0;
+            cursor: pointer;
+        }
+
+        .today {
+            background-color: #ffc107;
+            color: #fff;
+        }
+
+        .marked {
+            background-color: #28a745;
+            color: white;
+            position: relative;
+        }
+
+        .marked::after {
+            content: '✓';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        /* Popup styles */
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #ffffff;
+            padding: 20px;
+            border: 2px solid #000000;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .popup-buttons {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .popup-button {
+            margin: 0 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: #ffffff;
+            border: none;
+            border-radius: 5px;
+        }
+
+        .popup-button:hover {
+            background-color: #0056b3;
+        }
+
+        .year-navigation {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .year-navigation button {
+            cursor: pointer;
+            background-color: #007bff;
+            color: #ffffff;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 16px;
+            margin: 0 5px;
+        }
+
+        .year-navigation button:hover {
+            background-color: #0056b3;
+        }
+
+        .time {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .action-buttons {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .action-buttons button {
+            cursor: pointer;
+            background-color: #007bff;
+            color: #ffffff;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 16px;
+            margin: 0 5px;
+        }
+
+        .action-buttons button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .calendar-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="time" id="current-time"></div>
+
+    <div class="calendar-container">
+        <div class="calendar-header" id="calendar-header"></div>
+        <div class="calendar-grid" id="calendar-grid"></div>
+    </div>
+
+    <div class="year-navigation">
+        <button id="prev-year">Previous Year</button>
+        <button id="next-year">Next Year</button>
+    </div>
+
+    <div class="action-buttons">
+        <button id="reset">Reset</button>
+        <button id="export-txt">Export TXT</button>
+        <button id="export-pdf">Export PDF</button>
+    </div>
+
+    <div id="popup" class="popup">
+        <p>Do you want to mark this day?</p>
+        <div class="popup-buttons">
+            <button id="yes-button" class="popup-button">Yes</button>
+            <button id="close-button" class="popup-button">Close</button>
+            <button id="no-button" class="popup-button">No</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const calendarHeader = document.getElementById('calendar-header');
+            const calendarGrid = document.getElementById('calendar-grid');
+            const popup = document.getElementById('popup');
+            const yesButton = document.getElementById('yes-button');
+            const closeButton = document.getElementById('close-button');
+            const noButton = document.getElementById('no-button');
+            const prevYearButton = document.getElementById('prev-year');
+            const nextYearButton = document.getElementById('next-year');
+            const currentTimeDisplay = document.getElementById('current-time');
+            const resetButton = document.getElementById('reset');
+            const exportTxtButton = document.getElementById('export-txt');
+            const exportPdfButton = document.getElementById('export-pdf');
+
+            let currentYear = new Date().getFullYear();
+            let selectedDay;
+
+            // Load marked days from localStorage
+            let markedDays = JSON.parse(localStorage.getItem('markedDays')) || {};
+
+            renderCalendar(currentYear);
+
+            function renderCalendar(year) {
+                calendarHeader.textContent = year;
+
+                calendarGrid.innerHTML = '';
+
+                const currentDate = new Date();
+                const currentMonth = currentDate.getMonth();
+                const currentDay = currentDate.getDate();
+
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+                for (let month = 0; month < 12; month++) {
+                    const monthDiv = document.createElement('div');
+                    monthDiv.classList.add('month');
+                    monthDiv.textContent = months[month];
+                    const monthTable = document.createElement('table');
+                    monthTable.classList.add('month-table');
+
+                    // Create table headers for days of the week
+                    const dayOfWeekHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const tableHeaderRow = document.createElement('tr');
+                    dayOfWeekHeaders.forEach((day) => {
+                        const th = document.createElement('th');
+                        th.textContent = day;
+                        tableHeaderRow.appendChild(th);
+                    });
+                    monthTable.appendChild(tableHeaderRow);
+
+                    // Calculate the total days in the month
+                    const totalDays = new Date(year, month + 1, 0).getDate();
+
+                    // Start on the first day of the month
+                    let firstDay = new Date(year, month, 1).getDay(); // 0 is Sunday
+
+                    let currentWeekRow = document.createElement('tr');
+
+                    // Empty cells for the days before the first day of the month
+                    for (let i = 0; i < firstDay; i++) {
+                        const emptyCell = document.createElement('td');
+                        emptyCell.classList.add('calendar-day');
+                        currentWeekRow.appendChild(emptyCell);
+                    }
+
+                    // Iterate over all the days in the month
+                    for (let day = 1; day <= totalDays; day++) {
+                        const dayCell = document.createElement('td');
+                        dayCell.textContent = day;
+                        dayCell.classList.add('calendar-day');
+
+                        // Add class for today's date
+                        if (year === currentDate.getFullYear() && month === currentMonth && day === currentDay) {
+                            dayCell.classList.add('today');
+                        }
+
+                        // Add class for marked days
+                        const dateKey = `${year}-${month + 1}-${day}`;
+                        if (markedDays[dateKey]) {
+                            dayCell.classList.add('marked');
+                        }
+
+                        // Event listener to mark/unmark the day
+                        dayCell.addEventListener('click', () => {
+                            selectedDay = dateKey;
+                            popup.style.display = 'block';
+                        });
+
+                        currentWeekRow.appendChild(dayCell);
+
+                        // Move to the next week
+                        if ((day + firstDay) % 7 === 0 || day === totalDays) {
+                            monthTable.appendChild(currentWeekRow);
+                            currentWeekRow = document.createElement('tr');
+                        }
+                    }
+
+                    monthDiv.appendChild(monthTable);
+                    calendarGrid.appendChild(monthDiv);
+                }
+            }
+
+            // Display current time
+            function displayCurrentTime() {
+                const currentTime = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', second: 'numeric' });
+                currentTimeDisplay.textContent = `Current Time: ${currentTime}`;
+            }
+
+            // Update time every second
+            setInterval(displayCurrentTime, 1000);
+
+            // Popup reminder for medication at 22:00 based on user's location
+            function checkMedicationReminder() {
+                const currentHour = new Date().getHours();
+                if (currentHour === 22) {
+                    popup.style.display = 'block';
+                }
+            }
+
+            // Check for medication reminder every second
+            setInterval(checkMedicationReminder, 1000);
+
+            // Event listeners for year navigation buttons
+            prevYearButton.addEventListener('click', () => {
+                currentYear--;
+                renderCalendar(currentYear);
+            });
+
+            nextYearButton.addEventListener('click', () => {
+                currentYear++;
+                renderCalendar(currentYear);
+            });
+
+            // Popup close button event listener
+            closeButton.addEventListener('click', () => {
+                popup.style.display = 'none';
+            });
+
+            // "Yes" button event listener
+            yesButton.addEventListener('click', () => {
+                popup.style.display = 'none';
+                markedDays[selectedDay] = true;
+                localStorage.setItem('markedDays', JSON.stringify(markedDays));
+                renderCalendar(currentYear);
+            });
+
+            // "No" button event listener
+            noButton.addEventListener('click', () => {
+                popup.style.display = 'none';
+                delete markedDays[selectedDay];
+                localStorage.setItem('markedDays', JSON.stringify(markedDays));
+                renderCalendar(currentYear);
+            });
+
+            // Reset button event listener
+            resetButton.addEventListener('click', () => {
+                if (confirm('Are you sure you want to reset all marked days?')) {
+                    markedDays = {};
+                    localStorage.setItem('markedDays', JSON.stringify(markedDays));
+                    renderCalendar(currentYear);
+                }
+            });
+
+            // Export button event listeners
+            exportTxtButton.addEventListener('click', () => {
+                exportToTxt();
+            });
+
+            exportPdfButton.addEventListener('click', () => {
+                exportToPdf();
+            });
+
+            function exportToTxt() {
+                const markedDates = Object.keys(markedDays);
+                if (markedDates.length === 0) {
+                    alert('No marked dates to export.');
+                    return;
+                }
+
+                const datesByYearAndMonth = organizeDatesByYearAndMonth(markedDates);
+                let content = 'Marked Medication Dates:\n';
+                for (const year in datesByYearAndMonth) {
+                    content += `\n${year}:\n`;
+                    for (const month in datesByYearAndMonth[year]) {
+                        content += `  ${month}: ${datesByYearAndMonth[year][month].join(', ')}\n`;
+                    }
+                }
+
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'marked_dates.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            function exportToPdf() {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+
+                const markedDates = Object.keys(markedDays);
+                if (markedDates.length === 0) {
+                    alert('No marked dates to export.');
+                    return;
+                }
+
+                const datesByYearAndMonth = organizeDatesByYearAndMonth(markedDates);
+                doc.setFontSize(16);
+                doc.text('Marked Medication Dates:', 10, 10);
+                let yOffset = 20;
+
+                for (const year in datesByYearAndMonth) {
+                    doc.setFontSize(14);
+                    doc.setTextColor(40, 40, 40);
+                    doc.text(`${year}:`, 10, yOffset);
+                    yOffset += 10;
+
+                    for (const month in datesByYearAndMonth[year]) {
+                        doc.setFontSize(12);
+                        doc.setTextColor(60, 60, 60);
+                        doc.text(`  ${month}: ${datesByYearAndMonth[year][month].join(', ')}`, 10, yOffset);
+                        yOffset += 10;
+                    }
+
+                    yOffset += 5;
+                }
+
+                doc.save('marked_dates.pdf');
+            }
+
+            function organizeDatesByYearAndMonth(dates) {
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                const datesByYearAndMonth = {};
+
+                dates.forEach(date => {
+                    const [year, month, day] = date.split('-').map(Number);
+                    if (!datesByYearAndMonth[year]) {
+                        datesByYearAndMonth[year] = {};
+                    }
+                    const monthName = months[month - 1];
+                    if (!datesByYearAndMonth[year][monthName]) {
+                        datesByYearAndMonth[year][monthName] = [];
+                    }
+                    datesByYearAndMonth[year][monthName].push(day);
+                });
+
+                return datesByYearAndMonth;
+            }
+        });
+    </script>
+</body>
+</html>
